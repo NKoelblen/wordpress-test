@@ -7,7 +7,8 @@ if (!function_exists('thr_enqueue_styles')) {
     }
     add_action('wp_enqueue_scripts', 'thr_enqueue_styles');
 }
-// Register Custom Post Type
+
+/* Register Custom Post Type */
 function products_post_type()
 {
 
@@ -63,7 +64,7 @@ function products_post_type()
 }
 add_action('init', 'products_post_type', 0);
 
-// Repeatable Meta Box
+/* Repeatable Meta Box */
 add_action('admin_init', 'cxc_single_repeter_meta_boxes');
 function cxc_single_repeter_meta_boxes()
 {
@@ -134,16 +135,18 @@ function cxc_single_repeatable_meta_box_callback($post) //
     </table>
 <?php
 }
-?>
 
-// Save Repeatable Meta Box
-<?php
+/* Save Repeatable Meta Box */
+
 add_action('save_post', 'cxc_single_repeatable_meta_box_save');
 function cxc_single_repeatable_meta_box_save($post_id)
 {
-
-    if (!isset($_POST['formType']) && !wp_verify_nonce($_POST['formType'], 'repeterBox')) {
-        return;
+    if (!isset($_POST['formType'])) {
+        return $post_id;
+    }
+    $nonce = $_POST['formType'];
+    if (!wp_verify_nonce($nonce, 'repeterBox')) {
+        return $post_id;
     }
 
     if (!defined('DOING_AUTOSAVE')) {
@@ -160,10 +163,9 @@ function cxc_single_repeatable_meta_box_save($post_id)
         update_post_meta($post_id, 'custom_repeater_item', '');
     }
 }
-?>
 
-//Repeatable Meta Box JQuery
-<?php
+/* Repeatable Meta Box JQuery */
+
 add_action('admin_footer', 'cxc_single_repeatable_meta_box_footer');
 function cxc_single_repeatable_meta_box_footer()
 {
@@ -183,10 +185,9 @@ function cxc_single_repeatable_meta_box_footer()
     </script>
 <?php
 }
-?>
 
-//Repeatable Meta Box Style
-<?php
+/* Repeatable Meta Box Style */
+
 add_action('admin_head', 'cxc_single_repeatable_meta_box_header');
 function cxc_single_repeatable_meta_box_header()
 {
@@ -201,131 +202,115 @@ function cxc_single_repeatable_meta_box_header()
             display: none;
         }
     </style>
-    <?php
+<?php
 }
 
-/*
-Retrieving the values:
-Birthday = get_post_meta( get_the_ID(), 'advanced_options_birthday', true )
-*/
-class Advanced_Options
+// $meta_value = get_post_meta( $post_id, $field_id, true );
+// Example: get_post_meta( get_the_ID(), "my_metabox_field", true );
+
+class UntitledMetabox
 {
-    private $config = '{"title":"Advanced Options","prefix":"advanced_options_","domain":"advanced-options","class_name":"Advanced_Options","post-type":["post"],"context":"normal","priority":"default","fields":[{"type":"date","label":"Birthday","id":"advanced_options_birthday"}]}';
+
+    private $screens = array('post');
+
+    private $fields = array(
+        array(
+            'label' => 'Text',
+            'id' => 'test-text',
+            'type' => 'text',
+        )
+    );
 
     public function __construct()
     {
-        $this->config = json_decode($this->config, true);
-        add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
-        add_action('save_post', [$this, 'save_post']);
+        add_action('add_meta_boxes', array($this, 'add_meta_boxes'));
+        add_action('save_post', array($this, 'save_fields'));
     }
 
     public function add_meta_boxes()
     {
-        foreach ($this->config['post-type'] as $screen) {
+        foreach ($this->screens as $s) {
             add_meta_box(
-                sanitize_title($this->config['title']),
-                $this->config['title'],
-                [$this, 'add_meta_box_callback'],
-                $screen,
-                $this->config['context'],
-                $this->config['priority']
+                'Untitled',
+                __('Untitled', 'textdomain'),
+                array($this, 'meta_box_callback'),
+                $s,
+                'normal',
+                'default'
             );
         }
     }
 
-    public function save_post($post_id)
+    public function meta_box_callback($post)
     {
-        foreach ($this->config['fields'] as $field) {
+        wp_nonce_field('Untitled_data', 'Untitled_nonce');
+        $this->field_generator($post);
+    }
+
+    public function field_generator($post)
+    {
+        $output = '';
+        foreach ($this->fields as $field) {
+            $label = '<label for="' . $field['id'] . '">' . $field['label'] . '</label>';
+            $meta_value = get_post_meta($post->ID, $field['id'], true);
+            if (empty($meta_value)) {
+                if (isset($field['default'])) {
+                    $meta_value = $field['default'];
+                }
+            }
             switch ($field['type']) {
                 default:
-                    if (isset($_POST[$field['id']])) {
-                        $sanitized = sanitize_text_field($_POST[$field['id']]);
-                        update_post_meta($post_id, $field['id'], $sanitized);
-                    }
+                    $input = sprintf(
+                        '<input %s id="%s" name="%s" type="%s" value="%s">',
+                        $field['type'] !== 'color' ? 'style="width: 100%"' : '',
+                        $field['id'],
+                        $field['id'],
+                        $field['type'],
+                        $meta_value
+                    );
             }
+            $output .= $this->format_rows($label, $input);
         }
+        echo '<table class="form-table"><tbody>' . $output . '</tbody></table>';
     }
 
-    public function add_meta_box_callback()
+    public function format_rows($label, $input)
     {
-        $this->fields_table();
+        return '<div>' . $label . '</div><div>' . $input . '</div>';
     }
 
-    private function fields_table()
+
+
+    public function save_fields($post_id)
     {
-    ?><table class="form-table" role="presentation">
-            <tbody><?php
-                    foreach ($this->config['fields'] as $field) {
-                    ?><tr>
-                        <th scope="row"><?php $this->label($field); ?></th>
-                        <td><?php $this->field($field); ?></td>
-                    </tr><?php
-                        }
-                            ?></tbody>
-        </table><?php
-            }
-
-            private function label($field)
-            {
+        if (!isset($_POST['Untitled_nonce'])) {
+            return $post_id;
+        }
+        $nonce = $_POST['Untitled_nonce'];
+        if (!wp_verify_nonce($nonce, 'Untitled_data')) {
+            return $post_id;
+        }
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return $post_id;
+        }
+        foreach ($this->fields as $field) {
+            if (isset($_POST[$field['id']])) {
                 switch ($field['type']) {
-                    default:
-                        printf(
-                            '<label class="" for="%s">%s</label>',
-                            $field['id'],
-                            $field['label']
-                        );
-                }
-            }
-
-            private function field($field)
-            {
-                switch ($field['type']) {
-                    case 'date':
-                        $this->input_minmax($field);
+                    case 'email':
+                        $_POST[$field['id']] = sanitize_email($_POST[$field['id']]);
                         break;
-                    default:
-                        $this->input($field);
+                    case 'text':
+                        $_POST[$field['id']] = sanitize_text_field($_POST[$field['id']]);
+                        break;
                 }
-            }
-
-            private function input($field)
-            {
-                printf(
-                    '<input class="regular-text %s" id="%s" name="%s" %s type="%s" value="%s">',
-                    isset($field['class']) ? $field['class'] : '',
-                    $field['id'],
-                    $field['id'],
-                    isset($field['pattern']) ? "pattern='{$field['pattern']}'" : '',
-                    $field['type'],
-                    $this->value($field)
-                );
-            }
-
-            private function input_minmax($field)
-            {
-                printf(
-                    '<input class="regular-text" id="%s" %s %s name="%s" %s type="%s" value="%s">',
-                    $field['id'],
-                    isset($field['max']) ? "max='{$field['max']}'" : '',
-                    isset($field['min']) ? "min='{$field['min']}'" : '',
-                    $field['id'],
-                    isset($field['step']) ? "step='{$field['step']}'" : '',
-                    $field['type'],
-                    $this->value($field)
-                );
-            }
-
-            private function value($field)
-            {
-                global $post;
-                if (metadata_exists('post', $post->ID, $field['id'])) {
-                    $value = get_post_meta($post->ID, $field['id'], true);
-                } else if (isset($field['default'])) {
-                    $value = $field['default'];
-                } else {
-                    return '';
-                }
-                return str_replace('\u0027', "'", $value);
+                update_post_meta($post_id, $field['id'], $_POST[$field['id']]);
+            } else if ($field['type'] === 'checkbox') {
+                update_post_meta($post_id, $field['id'], '0');
             }
         }
-        new Advanced_Options;
+    }
+}
+
+if (class_exists('UntitledMetabox')) {
+    new UntitledMetabox;
+};
